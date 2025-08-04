@@ -29,12 +29,12 @@ jobs:
             target: arm-linux-gnueabi
             cc: arm-linux-gnueabi-gcc
             cxx: arm-linux-gnueabi-g++
-            extra_flags: "--host=arm-linux-gnueabi"
+            extra_flags: "--host=arm-linux-gnueabi --build=x86_64-linux-gnu"
           - name: mips
             target: mips-linux-gnu
             cc: mips-linux-gnu-gcc
             cxx: mips-linux-gnu-g++
-            extra_flags: "--host=mips-linux-gnu"
+            extra_flags: "--host=mips-linux-gnu --build=x86_64-linux-gnu"
 
     steps:
       - name: Checkout repository
@@ -51,7 +51,12 @@ jobs:
             libssl-dev \
             gcc-${{ matrix.arch.target }} \
             g++-${{ matrix.arch.target }} \
-            crossbuild-essential-${{ matrix.arch.target }} || true
+            crossbuild-essential-${{ matrix.arch.target }} \
+            binutils-${{ matrix.arch.target }} \
+            libc6-dev \
+            libgcc-${{ matrix.arch.target }}-dev || true
+          # Verify compiler installation
+          ${{ matrix.arch.cc }} --version || echo "Compiler not found"
 
       - name: Download and extract socat
         run: |
@@ -66,10 +71,19 @@ jobs:
             CC=${{ matrix.arch.cc }} \
             CXX=${{ matrix.arch.cxx }} \
             ${{ matrix.arch.extra_flags }} \
-            --prefix=$PWD/install
+            --prefix=$PWD/install \
+            --disable-dependency-tracking
         env:
           CFLAGS: "-O2"
           CXXFLAGS: "-O2"
+          LDFLAGS: "-L/usr/${{ matrix.arch.target }}/lib"
+          CPPFLAGS: "-I/usr/${{ matrix.arch.target }}/include"
+
+      - name: Debug configure failure
+        if: failure()
+        run: |
+          echo "Configure failed. Printing config.log for ${{ matrix.arch.name }}"
+          cat socat/config.log || true
 
       - name: Build socat
         run: |
