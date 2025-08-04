@@ -1,3 +1,4 @@
+```yaml
 name: Build socat for MIPSel
 
 on:
@@ -11,114 +12,44 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
+
     steps:
+      # Check out the repository (optional, if you want to include additional files)
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            autoconf \
-            automake \
-            libtool \
-            libssl-dev \
-            gcc-mipsel-linux-gnu \
-            g++-mipsel-linux-gnu \
-            binutils-mipsel-linux-gnu \
-            libc6-dev-mipsel-cross \
-            libgcc-mipsel-linux-gnu-dev \
-            linux-libc-dev-mipsel-cross \
-            libstdc++6-mipsel-cross \
-            libgcc1-mipsel-cross \
-            libc6-mipsel-cross
-          # Verify compiler and library paths
-          mipsel-linux-gnu-gcc --version || echo "Compiler not found"
-          ls -l /usr/mipsel-linux-gnu/lib || echo "Library path not found"
-          ls -l /usr/mipsel-linux-gnu/include || echo "Include path not found"
+      # Set up Docker with MIPSel cross-compilation environment
+      - name: Set up QEMU for MIPSel
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: mipsel
 
-      - name: Download and extract socat
+      # Download socat source code
+      - name: Download socat source
         run: |
-          wget http://www.dest-unreach.org/socat/download/socat-1.7.4.4.tar.gz
-          tar -xzf socat-1.7.4.4.tar.gz
-          mv socat-1.7.4.4 socat
+          wget http://www.dest-unreach.org/socat/download/socat-1.8.0.3.tar.gz
+          tar -xzf socat-1.8.0.3.tar.gz
+          mv socat-1.8.0.3 socat-source
 
-      - name: Test compiler
+      # Build socat for MIPSel using a Docker container with cross-compiler
+      - name: Build socat for MIPSel
         run: |
-          echo "int main() { return 0; }" > test.c
-          mipsel-linux-gnu-gcc -o test test.c -I/usr/mipsel-linux-gnu/include -L/usr/mipsel-linux-gnu/lib || echo "Compiler test failed"
+          docker run --rm -v $(pwd)/socat-source:/socat-source -w /socat-source \
+            multiarch/crossbuild \
+            /bin/bash -c "\
+              apt-get update && \
+              apt-get install -y build-essential && \
+              ./configure --host=mipsel-linux-gnu CC=mipsel-linux-gnu-gcc CFLAGS='-O2 -march=mips32' && \
+              make && \
+              mipsel-linux-gnu-strip socat"
+          mv socat-source/socat .
 
-      - name: Configure socat for mipsel
-        run: |
-          cd socat
-          ./configure \
-            CC=mipsel-linux-gnu-gcc \
-            CXX=mipsel-linux-gnu-g++ \
-            --host=mipsel-linux-gnu \
-            --build=x86_64-linux-gnu \
-            --prefix=$PWD/install
-        env:
-          CFLAGS: "-O2"
-          CXXFLAGS: "-O2"
-          LDFLAGS: "-L/usr/mipsel-linux-gnu/lib"
-          CPPFLAGS: "-I/usr/mipsel-linux-gnu/include"
-          PKG_CONFIG_PATH: "/usr/mipsel-linux-gnu/lib/pkgconfig"
-
-      - name: Check build environment
-        run: |
-          echo "Disk space:"
-          df -h
-          echo "Memory usage:"
-          free -m
-          echo "CPU info:"
-          lscpu
-          echo "Running processes:"
-          ps aux
-
-      - name: Build socat with progress monitoring
-        timeout-minutes: 15
-        run: |
-          cd socat
-          # Script to monitor build progress and log output
-          echo "Starting build with verbose output..."
-          {
-            make V=1 -j1 | while read -r line; do
-              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') $line"
-              # Reset inactivity timer on each line
-            done
-          } 2>&1 | tee build.log
-          # Check if build completed successfully
-          if [ ! -f socat ]; then
-            echo "Build failed: socat binary not found"
-            exit 1
-          fi
-
-      - name: Debug build failure
-        if: failure()
-        run: |
-          echo "Build failed. Printing build.log"
-          cat socat/build.log || true
-          echo "Listing generated files"
-          find socat -type f || true
-          echo "Last few lines of build.log:"
-          tail -n 20 socat/build.log || true
-
-      - name: Install socat
-        run: |
-          cd socat
-          make install
-
-      - name: Package binary
-        run: |
-          mkdir -p artifacts
-          cp socat/install/bin/socat artifacts/socat-mipsel
-          tar -czf socat-mipsel.tar.gz -C artifacts socat-mipsel
-
-      - name: Upload artifact
+      # Upload the compiled binary as an artifact
+      - name: Upload socat binary
         uses: actions/upload-artifact@v4
         with:
-          name: socat-mipsel
-          path: socat-mipsel.tar.gz
-          retention-days: 7
+          name: socat-mipsel-binary
+          path: socat
+          retention-days: 5
+```
