@@ -1,4 +1,4 @@
-name: Build socat for Multiple Architectures
+name: Build socat for MIPSel
 
 on:
   push:
@@ -12,88 +12,31 @@ on:
 jobs:
   build:
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        arch:
-          - name: x86
-            target: i686-linux-gnu
-            cc: gcc
-            cxx: g++
-            extra_flags: "-m32"
-            is_cross: false
-            lib_path: /usr/lib
-            include_path: /usr/include
-          - name: x64
-            target: x86_64-linux-gnu
-            cc: gcc
-            cxx: g++
-            extra_flags: ""
-            is_cross: false
-            lib_path: /usr/lib
-            include_path: /usr/include
-          - name: armv6
-            target: arm-linux-gnueabi
-            cc: arm-linux-gnueabi-gcc
-            cxx: arm-linux-gnueabi-g++
-            extra_flags: "--host=arm-linux-gnueabi --build=x86_64-linux-gnu"
-            is_cross: true
-            lib_path: /usr/arm-linux-gnueabi/lib
-            include_path: /usr/arm-linux-gnueabi/include
-          - name: mips
-            target: mips-linux-gnu
-            cc: mips-linux-gnu-gcc
-            cxx: mips-linux-gnu-g++
-            extra_flags: "--host=mips-linux-gnu --build=x86_64-linux-gnu"
-            is_cross: true
-            lib_path: /usr/mips-linux-gnu/lib
-            include_path: /usr/mips-linux-gnu/include
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Enable 32-bit architecture for x86
-        if: matrix.arch.name == 'x86'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-
       - name: Install dependencies
         run: |
           sudo apt-get update
-          if [ "${{ matrix.arch.is_cross }}" = "true" ]; then
-            sudo apt-get install -y \
-              build-essential \
-              autoconf \
-              automake \
-              libtool \
-              libssl-dev \
-              gcc-${{ matrix.arch.target }} \
-              g++-${{ matrix.arch.target }} \
-              binutils-${{ matrix.arch.target }} \
-              libc6-dev-${{ matrix.arch.target }}-cross \
-              libgcc-${{ matrix.arch.target }}-dev \
-              linux-libc-dev-${{ matrix.arch.target }}-cross \
-              libstdc++6-${{ matrix.arch.target }}-cross \
-              libgcc1-${{ matrix.arch.target }}-cross || true
-          else
-            sudo apt-get install -y \
-              build-essential \
-              autoconf \
-              automake \
-              libtool \
-              libssl-dev \
-              gcc \
-              g++ \
-              libc6-dev${{ matrix.arch.name == 'x86' && ':i386' || '' }} \
-              libgcc-9-dev${{ matrix.arch.name == 'x86' && ':i386' || '' }} \
-              linux-libc-dev${{ matrix.arch.name == 'x86' && ':i386' || '' }} \
-              libstdc++6${{ matrix.arch.name == 'x86' && ':i386' || '' }} || true
-          fi
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            libssl-dev \
+            gcc-mipsel-linux-gnu \
+            g++-mipsel-linux-gnu \
+            binutils-mipsel-linux-gnu \
+            libc6-dev-mipsel-cross \
+            libgcc-mipsel-linux-gnu-dev \
+            linux-libc-dev-mipsel-cross \
+            libstdc++6-mipsel-cross \
+            libgcc1-mipsel-cross
           # Verify compiler and library paths
-          ${{ matrix.arch.cc }} --version || echo "Compiler not found"
-          ls -l ${{ matrix.arch.lib_path }} || echo "Library path not found"
-          ls -l ${{ matrix.arch.include_path }} || echo "Include path not found"
+          mipsel-linux-gnu-gcc --version || echo "Compiler not found"
+          ls -l /usr/mipsel-linux-gnu/lib || echo "Library path not found"
+          ls -l /usr/mipsel-linux-gnu/include || echo "Include path not found"
 
       - name: Download and extract socat
         run: |
@@ -104,31 +47,32 @@ jobs:
       - name: Test compiler
         run: |
           echo "int main() { return 0; }" > test.c
-          ${{ matrix.arch.cc }} ${{ matrix.arch.extra_flags }} -o test test.c -I${{ matrix.arch.include_path }} -L${{ matrix.arch.lib_path }} || echo "Compiler test failed"
+          mipsel-linux-gnu-gcc -o test test.c -I/usr/mipsel-linux-gnu/include -L/usr/mipsel-linux-gnu/lib || echo "Compiler test failed"
 
-      - name: Configure socat for ${{ matrix.arch.name }}
+      - name: Configure socat for mipsel
         run: |
           cd socat
           ./configure \
-            CC="${{ matrix.arch.cc }}" \
-            CXX="${{ matrix.arch.cxx }}" \
-            CFLAGS="${{ matrix.arch.extra_flags }} -O2" \
-            CXXFLAGS="${{ matrix.arch.extra_flags }} -O2" \
-            LDFLAGS="-L${{ matrix.arch.lib_path }}" \
-            CPPFLAGS="-I${{ matrix.arch.include_path }}" \
-            ${{ matrix.arch.extra_flags }} \
+            CC=mipsel-linux-gnu-gcc \
+            CXX=mipsel-linux-gnu-g++ \
+            --host=mipsel-linux-gnu \
+            --build=x86_64-linux-gnu \
             --prefix=$PWD/install
         env:
-          PKG_CONFIG_PATH: ${{ matrix.arch.lib_path }}/pkgconfig
+          CFLAGS: "-O2"
+          CXXFLAGS: "-O2"
+          LDFLAGS: "-L/usr/mipsel-linux-gnu/lib"
+          CPPFLAGS: "-I/usr/mipsel-linux-gnu/include"
+          PKG_CONFIG_PATH: "/usr/mipsel-linux-gnu/lib/pkgconfig"
 
       - name: Debug configure failure
         if: failure()
         run: |
-          echo "Configure failed. Printing config.log for ${{ matrix.arch.name }}"
+          echo "Configure failed. Printing config.log for mipsel"
           cat socat/config.log || true
           echo "Listing library and include paths"
-          find ${{ matrix.arch.lib_path }} -type f || true
-          find ${{ matrix.arch.include_path }} -type f || true
+          find /usr/mipsel-linux-gnu/lib -type f || true
+          find /usr/mipsel-linux-gnu/include -type f || true
 
       - name: Build socat
         run: |
@@ -143,12 +87,12 @@ jobs:
       - name: Package binary
         run: |
           mkdir -p artifacts
-          cp socat/install/bin/socat artifacts/socat-${{ matrix.arch.name }}
-          tar -czf socat-${{ matrix.arch.name }}.tar.gz -C artifacts socat-${{ matrix.arch.name }}
+          cp socat/install/bin/socat artifacts/socat-mipsel
+          tar -czf socat-mipsel.tar.gz -C artifacts socat-mipsel
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: socat-${{ matrix.arch.name }}
-          path: socat-${{ matrix.arch.name }}.tar.gz
+          name: socat-mipsel
+          path: socat-mipsel.tar.gz
           retention-days: 7
