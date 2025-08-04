@@ -3,7 +3,7 @@ name: Build socat for Multiple Architectures
 on:
   push:
     branches:
-      - main
+     Supergrok - main
   pull_request:
     branches:
       - main
@@ -51,18 +51,25 @@ jobs:
             libssl-dev \
             gcc-${{ matrix.arch.target }} \
             g++-${{ matrix.arch.target }} \
-            crossbuild-essential-${{ matrix.arch.target }} \
             binutils-${{ matrix.arch.target }} \
-            libc6-dev \
-            libgcc-${{ matrix.arch.target }}-dev || true
-          # Verify compiler installation
+            libc6-dev-${{ matrix.arch.target }}-cross \
+            libgcc-${{ matrix.arch.target }}-dev \
+            linux-libc-dev-${{ matrix.arch.target }}-cross || true
+          # Verify compiler and library paths
           ${{ matrix.arch.cc }} --version || echo "Compiler not found"
+          ls -l /usr/${{ matrix.arch.target }}/lib || echo "Library path not found"
+          ls -l /usr/${{ matrix.arch.target }}/include || echo "Include path not found"
 
       - name: Download and extract socat
         run: |
           wget http://www.dest-unreach.org/socat/download/socat-1.7.4.4.tar.gz
           tar -xzf socat-1.7.4.4.tar.gz
           mv socat-1.7.4.4 socat
+
+      - name: Test compiler
+        run: |
+          echo "int main() { return 0; }" > test.c
+          ${{ matrix.arch.cc }} -o test test.c -I/usr/${{ matrix.arch.target }}/include -L/usr/${{ matrix.arch.target }}/lib || echo "Compiler test failed"
 
       - name: Configure socat for ${{ matrix.arch.name }}
         run: |
@@ -71,8 +78,7 @@ jobs:
             CC=${{ matrix.arch.cc }} \
             CXX=${{ matrix.arch.cxx }} \
             ${{ matrix.arch.extra_flags }} \
-            --prefix=$PWD/install \
-            --disable-dependency-tracking
+            --prefix=$PWD/install
         env:
           CFLAGS: "-O2"
           CXXFLAGS: "-O2"
@@ -84,6 +90,8 @@ jobs:
         run: |
           echo "Configure failed. Printing config.log for ${{ matrix.arch.name }}"
           cat socat/config.log || true
+          echo "Listing library and include paths"
+          find /usr/${{ matrix.arch.target }} -type f || true
 
       - name: Build socat
         run: |
