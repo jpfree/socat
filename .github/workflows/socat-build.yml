@@ -32,7 +32,8 @@ jobs:
             libgcc-mipsel-linux-gnu-dev \
             linux-libc-dev-mipsel-cross \
             libstdc++6-mipsel-cross \
-            libgcc1-mipsel-cross
+            libgcc1-mipsel-cross \
+            libc6-mipsel-cross
           # Verify compiler and library paths
           mipsel-linux-gnu-gcc --version || echo "Compiler not found"
           ls -l /usr/mipsel-linux-gnu/lib || echo "Library path not found"
@@ -65,19 +66,28 @@ jobs:
           CPPFLAGS: "-I/usr/mipsel-linux-gnu/include"
           PKG_CONFIG_PATH: "/usr/mipsel-linux-gnu/lib/pkgconfig"
 
-      - name: Debug configure failure
-        if: failure()
+      - name: Check build environment
         run: |
-          echo "Configure failed. Printing config.log for mipsel"
-          cat socat/config.log || true
-          echo "Listing library and include paths"
-          find /usr/mipsel-linux-gnu/lib -type f || true
-          find /usr/mipsel-linux-gnu/include -type f || true
+          echo "Disk space:"
+          df -h
+          echo "Memory usage:"
+          free -m
+          echo "CPU info:"
+          lscpu
 
       - name: Build socat
+        timeout-minutes: 10
         run: |
           cd socat
-          make -j$(nproc)
+          make V=1 -j$(nproc) 2>&1 | tee build.log
+
+      - name: Debug build failure
+        if: failure()
+        run: |
+          echo "Build failed. Printing build.log"
+          cat socat/build.log || true
+          echo "Listing generated files"
+          find socat -type f || true
 
       - name: Install socat
         run: |
