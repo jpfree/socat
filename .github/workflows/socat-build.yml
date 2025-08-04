@@ -3,7 +3,7 @@ name: Build socat for Multiple Architectures
 on:
   push:
     branches:
-     Supergrok - main
+      - main
   pull_request:
     branches:
       - main
@@ -54,7 +54,8 @@ jobs:
             binutils-${{ matrix.arch.target }} \
             libc6-dev-${{ matrix.arch.target }}-cross \
             libgcc-${{ matrix.arch.target }}-dev \
-            linux-libc-dev-${{ matrix.arch.target }}-cross || true
+            linux-libc-dev-${{ matrix.arch.target }}-cross \
+            libstdc++6-${{ matrix.arch.target }}-cross || true
           # Verify compiler and library paths
           ${{ matrix.arch.cc }} --version || echo "Compiler not found"
           ls -l /usr/${{ matrix.arch.target }}/lib || echo "Library path not found"
