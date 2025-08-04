@@ -74,12 +74,26 @@ jobs:
           free -m
           echo "CPU info:"
           lscpu
+          echo "Running processes:"
+          ps aux
 
-      - name: Build socat
-        timeout-minutes: 10
+      - name: Build socat with progress monitoring
+        timeout-minutes: 15
         run: |
           cd socat
-          make V=1 -j$(nproc) 2>&1 | tee build.log
+          # Script to monitor build progress and log output
+          echo "Starting build with verbose output..."
+          {
+            make V=1 -j1 | while read -r line; do
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') $line"
+              # Reset inactivity timer on each line
+            done
+          } 2>&1 | tee build.log
+          # Check if build completed successfully
+          if [ ! -f socat ]; then
+            echo "Build failed: socat binary not found"
+            exit 1
+          fi
 
       - name: Debug build failure
         if: failure()
@@ -88,6 +102,8 @@ jobs:
           cat socat/build.log || true
           echo "Listing generated files"
           find socat -type f || true
+          echo "Last few lines of build.log:"
+          tail -n 20 socat/build.log || true
 
       - name: Install socat
         run: |
