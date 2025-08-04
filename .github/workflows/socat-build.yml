@@ -1,4 +1,3 @@
-```yaml
 name: Build socat for MIPSel
 
 on:
@@ -52,4 +51,3 @@ jobs:
           name: socat-mipsel-binary
           path: socat
           retention-days: 5
-```
