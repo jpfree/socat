@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Set up Docker with MIPSel cross-compilation environment
+      # Set up QEMU for MIPSel
       - name: Set up QEMU for MIPSel
         uses: docker/setup-qemu-action@v3
         with:
@@ -37,6 +37,8 @@ jobs:
           docker run --rm -v $(pwd)/socat-source:/socat-source -w /socat-source \
             multiarch/crossbuild \
             /bin/bash -c "\
+              echo 'deb http://archive.debian.org/debian stretch main' > /etc/apt/sources.list && \
+              echo 'deb http://archive.debian.org/debian-security stretch/updates main' >> /etc/apt/sources.list && \
               apt-get update && \
               apt-get install -y build-essential && \
               ./configure --host=mipsel-linux-gnu CC=mipsel-linux-gnu-gcc CFLAGS='-O2 -march=mips32' && \
