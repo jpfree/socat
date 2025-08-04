@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         arch:
@@ -19,7 +19,7 @@ jobs:
             target: i686-linux-gnu
             cc: gcc
             cxx: g++
-            extra_flags: ""
+            extra_flags: "-m32"
             is_cross: false
             lib_path: /usr/lib
             include_path: /usr/include
@@ -52,6 +52,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Enable 32-bit architecture for x86
+        if: matrix.arch.name == 'x86'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -68,7 +74,8 @@ jobs:
               libc6-dev-${{ matrix.arch.target }}-cross \
               libgcc-${{ matrix.arch.target }}-dev \
               linux-libc-dev-${{ matrix.arch.target }}-cross \
-              libstdc++6-${{ matrix.arch.target }}-cross || true
+              libstdc++6-${{ matrix.arch.target }}-cross \
+              libgcc1-${{ matrix.arch.target }}-cross || true
           else
             sudo apt-get install -y \
               build-essential \
@@ -78,10 +85,10 @@ jobs:
               libssl-dev \
               gcc \
               g++ \
-              libc6-dev \
-              libgcc-13-dev \
-              linux-libc-dev \
-              libstdc++6 || true
+              libc6-dev${{ matrix.arch.name == 'x86' && ':i386' || '' }} \
+              libgcc-9-dev${{ matrix.arch.name == 'x86' && ':i386' || '' }} \
+              linux-libc-dev${{ matrix.arch.name == 'x86' && ':i386' || '' }} \
+              libstdc++6${{ matrix.arch.name == 'x86' && ':i386' || '' }} || true
           fi
           # Verify compiler and library paths
           ${{ matrix.arch.cc }} --version || echo "Compiler not found"
@@ -97,21 +104,22 @@ jobs:
       - name: Test compiler
         run: |
           echo "int main() { return 0; }" > test.c
-          ${{ matrix.arch.cc }} -o test test.c -I${{ matrix.arch.include_path }} -L${{ matrix.arch.lib_path }} || echo "Compiler test failed"
+          ${{ matrix.arch.cc }} ${{ matrix.arch.extra_flags }} -o test test.c -I${{ matrix.arch.include_path }} -L${{ matrix.arch.lib_path }} || echo "Compiler test failed"
 
       - name: Configure socat for ${{ matrix.arch.name }}
         run: |
           cd socat
           ./configure \
-            CC=${{ matrix.arch.cc }} \
-            CXX=${{ matrix.arch.cxx }} \
+            CC="${{ matrix.arch.cc }}" \
+            CXX="${{ matrix.arch.cxx }}" \
+            CFLAGS="${{ matrix.arch.extra_flags }} -O2" \
+            CXXFLAGS="${{ matrix.arch.extra_flags }} -O2" \
+            LDFLAGS="-L${{ matrix.arch.lib_path }}" \
+            CPPFLAGS="-I${{ matrix.arch.include_path }}" \
             ${{ matrix.arch.extra_flags }} \
             --prefix=$PWD/install
         env:
-          CFLAGS: "-O2"
-          CXXFLAGS: "-O2"
-          LDFLAGS: "-L${{ matrix.arch.lib_path }}"
-          CPPFLAGS: "-I${{ matrix.arch.include_path }}"
+          PKG_CONFIG_PATH: ${{ matrix.arch.lib_path }}/pkgconfig
 
       - name: Debug configure failure
         if: failure()
