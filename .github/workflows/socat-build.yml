@@ -20,21 +20,33 @@ jobs:
             cc: gcc
             cxx: g++
             extra_flags: ""
+            is_cross: false
+            lib_path: /usr/lib
+            include_path: /usr/include
           - name: x64
             target: x86_64-linux-gnu
             cc: gcc
             cxx: g++
             extra_flags: ""
+            is_cross: false
+            lib_path: /usr/lib
+            include_path: /usr/include
           - name: armv6
             target: arm-linux-gnueabi
             cc: arm-linux-gnueabi-gcc
             cxx: arm-linux-gnueabi-g++
             extra_flags: "--host=arm-linux-gnueabi --build=x86_64-linux-gnu"
+            is_cross: true
+            lib_path: /usr/arm-linux-gnueabi/lib
+            include_path: /usr/arm-linux-gnueabi/include
           - name: mips
             target: mips-linux-gnu
             cc: mips-linux-gnu-gcc
             cxx: mips-linux-gnu-g++
             extra_flags: "--host=mips-linux-gnu --build=x86_64-linux-gnu"
+            is_cross: true
+            lib_path: /usr/mips-linux-gnu/lib
+            include_path: /usr/mips-linux-gnu/include
 
     steps:
       - name: Checkout repository
@@ -43,23 +55,38 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            autoconf \
-            automake \
-            libtool \
-            libssl-dev \
-            gcc-${{ matrix.arch.target }} \
-            g++-${{ matrix.arch.target }} \
-            binutils-${{ matrix.arch.target }} \
-            libc6-dev-${{ matrix.arch.target }}-cross \
-            libgcc-${{ matrix.arch.target }}-dev \
-            linux-libc-dev-${{ matrix.arch.target }}-cross \
-            libstdc++6-${{ matrix.arch.target }}-cross || true
+          if [ "${{ matrix.arch.is_cross }}" = "true" ]; then
+            sudo apt-get install -y \
+              build-essential \
+              autoconf \
+              automake \
+              libtool \
+              libssl-dev \
+              gcc-${{ matrix.arch.target }} \
+              g++-${{ matrix.arch.target }} \
+              binutils-${{ matrix.arch.target }} \
+              libc6-dev-${{ matrix.arch.target }}-cross \
+              libgcc-${{ matrix.arch.target }}-dev \
+              linux-libc-dev-${{ matrix.arch.target }}-cross \
+              libstdc++6-${{ matrix.arch.target }}-cross || true
+          else
+            sudo apt-get install -y \
+              build-essential \
+              autoconf \
+              automake \
+              libtool \
+              libssl-dev \
+              gcc \
+              g++ \
+              libc6-dev \
+              libgcc-13-dev \
+              linux-libc-dev \
+              libstdc++6 || true
+          fi
           # Verify compiler and library paths
           ${{ matrix.arch.cc }} --version || echo "Compiler not found"
-          ls -l /usr/${{ matrix.arch.target }}/lib || echo "Library path not found"
-          ls -l /usr/${{ matrix.arch.target }}/include || echo "Include path not found"
+          ls -l ${{ matrix.arch.lib_path }} || echo "Library path not found"
+          ls -l ${{ matrix.arch.include_path }} || echo "Include path not found"
 
       - name: Download and extract socat
         run: |
@@ -70,7 +97,7 @@ jobs:
       - name: Test compiler
         run: |
           echo "int main() { return 0; }" > test.c
-          ${{ matrix.arch.cc }} -o test test.c -I/usr/${{ matrix.arch.target }}/include -L/usr/${{ matrix.arch.target }}/lib || echo "Compiler test failed"
+          ${{ matrix.arch.cc }} -o test test.c -I${{ matrix.arch.include_path }} -L${{ matrix.arch.lib_path }} || echo "Compiler test failed"
 
       - name: Configure socat for ${{ matrix.arch.name }}
         run: |
@@ -83,8 +110,8 @@ jobs:
         env:
           CFLAGS: "-O2"
           CXXFLAGS: "-O2"
-          LDFLAGS: "-L/usr/${{ matrix.arch.target }}/lib"
-          CPPFLAGS: "-I/usr/${{ matrix.arch.target }}/include"
+          LDFLAGS: "-L${{ matrix.arch.lib_path }}"
+          CPPFLAGS: "-I${{ matrix.arch.include_path }}"
 
       - name: Debug configure failure
         if: failure()
@@ -92,7 +119,8 @@ jobs:
           echo "Configure failed. Printing config.log for ${{ matrix.arch.name }}"
           cat socat/config.log || true
           echo "Listing library and include paths"
-          find /usr/${{ matrix.arch.target }} -type f || true
+          find ${{ matrix.arch.lib_path }} -type f || true
+          find ${{ matrix.arch.include_path }} -type f || true
 
       - name: Build socat
         run: |
