@@ -1,0 +1,95 @@
+name: Build socat for Multiple Architectures
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch:
+          - name: x86
+            target: i686-linux-gnu
+            cc: gcc
+            cxx: g++
+            extra_flags: ""
+          - name: x64
+            target: x86_64-linux-gnu
+            cc: gcc
+            cxx: g++
+            extra_flags: ""
+          - name: armv6
+            target: arm-linux-gnueabi
+            cc: arm-linux-gnueabi-gcc
+            cxx: arm-linux-gnueabi-g++
+            extra_flags: "--host=arm-linux-gnueabi"
+          - name: mips
+            target: mips-linux-gnu
+            cc: mips-linux-gnu-gcc
+            cxx: mips-linux-gnu-g++
+            extra_flags: "--host=mips-linux-gnu"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            libssl-dev \
+            gcc-${{ matrix.arch.target }} \
+            g++-${{ matrix.arch.target }} \
+            crossbuild-essential-${{ matrix.arch.target }} || true
+
+      - name: Download and extract socat
+        run: |
+          wget http://www.dest-unreach.org/socat/download/socat-1.7.4.4.tar.gz
+          tar -xzf socat-1.7.4.4.tar.gz
+          mv socat-1.7.4.4 socat
+
+      - name: Configure socat for ${{ matrix.arch.name }}
+        run: |
+          cd socat
+          ./configure \
+            CC=${{ matrix.arch.cc }} \
+            CXX=${{ matrix.arch.cxx }} \
+            ${{ matrix.arch.extra_flags }} \
+            --prefix=$PWD/install
+        env:
+          CFLAGS: "-O2"
+          CXXFLAGS: "-O2"
+
+      - name: Build socat
+        run: |
+          cd socat
+          make -j$(nproc)
+
+      - name: Install socat
+        run: |
+          cd socat
+          make install
+
+      - name: Package binary
+        run: |
+          mkdir -p artifacts
+          cp socat/install/bin/socat artifacts/socat-${{ matrix.arch.name }}
+          tar -czf socat-${{ matrix.arch.name }}.tar.gz -C artifacts socat-${{ matrix.arch.name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: socat-${{ matrix.arch.name }}
+          path: socat-${{ matrix.arch.name }}.tar.gz
+          retention-days: 7
